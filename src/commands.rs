@@ -1,9 +1,9 @@
 use std::env;
-use std::process::Command;
-use std::process::*;
+use std::process::{Command, Stdio};
 use super::*;
-use std::os::unix::io::AsRawFd;
 use std::os::unix::io::FromRawFd;
+use nix::unistd::pipe;
+
 
 // mod utilities;
 use crate::utilities::*;
@@ -41,23 +41,34 @@ pub fn cmd_exec(program: &str ,args: Vec<&str>){
 
 pub fn pipe_exec(input: &str){
     let mut commands : Vec<&str> = input.split("|").collect();
-    let cmd1 =  parse_cmd(commands.pop().unwrap());
-    println!("comando 1: {:?}{}",cmd1.0,cmd1.1);
-    let cmd2 =  parse_cmd(commands.pop().unwrap());
-    println!("comando 2: {:?}{}",cmd2.0,cmd2.1);
 
-   
+    // parseamos los dos comandos
+    let cmd1 =  parse_cmd(commands.pop().unwrap());
+    let cmd2 =  parse_cmd(commands.pop().unwrap());
+
+    // generamos el pipe
+    let fd = pipe().unwrap();
+
+    let (pipe_in,pipe_out) = unsafe {
+        (Stdio::from_raw_fd(fd.0),
+        Stdio::from_raw_fd(fd.1))
+    };
+
+    // ejecutamos los dos child y los pipeamos
     let child1 = Command::new(cmd2.1)
         .args(cmd2.0)
-        .stdout(Stdio::piped())
+        .stdout(pipe_out)
         .spawn()
         .unwrap();
  
-    let _child2 = Command::new(cmd1.1)
+    let mut child2 = Command::new(cmd1.1)
         .args(cmd1.0)
-        .stdin(child1.stdout.unwrap())
-        .output()
+        .stdin(pipe_in)
+        .spawn()
         .unwrap();
+
+    // esperamos que termine
+    child2.wait().unwrap();
 }
 
 pub fn cmd_handler(input: &str) -> bool{
