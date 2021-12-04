@@ -1,17 +1,24 @@
 use std::io::*;
-use std::process::Command;
 use std::env;
 use std::str;
 use colored::Colorize;
 
-use crate::commands::change_dir;
+mod utilities;
+mod commands;
+use crate::commands::*;
 
-const START_MSG: &str  = "\nmyshell --> use at your own risk  |\\---/|
-                                  | o_o |
-                                   \\_^_/
+
+const START_MSG: &str  = "\nmyshell --> use at your own risk  
+
+                    |\\---/|
+                    | o_o |
+                     \\_^_/
 ";
 
-mod commands;
+// enum BuildinCommands {
+//     Cd,
+//     Close,
+// }
 
 fn main() {
 
@@ -36,41 +43,30 @@ fn main() {
         stdout().flush().expect("Error al hacer flush");
 
         let mut input = String::new();
-        let result = stdin().read_line(&mut input);
-        match result{
-            Ok(_r) => { }, //solo me importa handlear el error
-            Err(e) => panic!("Error al leer una linea!\n {}",e),
-        }
-        
-        /* tomamos el input, lo parseamos y lo metemos en un vector */
-        let mut temp = input.split_whitespace();
-        let program = temp.next().unwrap(); 
-        let mut args : Vec<&str> = temp.clone().collect();
 
-        match program {
-            // si el comando es cd entramos aca
-            "cd" => { change_dir(args); },
-        // en cualquier otro caso entramos aca
-            &_ => {
-                let mut child = Command::new(program);
-        
-                if let Ok(mut c) = child.args(args).spawn() {
-                        match c.wait(){
-                            Ok(_resolve) =>{},
-                            Err(error) => panic!("{}",error),
-                        }
+        match stdin().read_line(&mut input){
+            Ok(_resolve) => { }, //solo me importa handlear el error
+            Err(error) => panic!("Error al leer una linea!\n {}",error),
+        }
+
+        // buscamos si el comando requiere un pipe
+        let pipe: bool = match input.find('|'){
+            Some(resolve) => {
+                if resolve > 0 {
+                    true
                 }
                 else{
-                    println!("Error al ejecutar el comando!");
+                    false
                 }
             },
+            None =>{ false },  
+        };
+        if pipe {
+            pipe_exec(&input);
         }
-
-        // println!("{}{:?}",program,cmd);
-
-      
-
-
-
+        else if !cmd_handler(&input){
+            break;
+        }
     }
 }
+
