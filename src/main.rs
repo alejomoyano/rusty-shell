@@ -4,8 +4,10 @@ use std::str;
 
 mod utilities;
 mod commands;
+mod signals;
 use crate::commands::*;
 use crate::utilities::*;
+use crate::signals::*;
 
 // const START_MSG: &str  = "\nmyshell --> use at your own risk  
 
@@ -19,25 +21,14 @@ fn main() {
 
     // println!("{}",START_MSG.red().bold());
 
-    /* el metodo var devuelve un Option.
-    guardamos en user la env si existe, sino panic!*/
-    // let user= match env::var_os("USER"){
-    //     Some(u) => u.into_string().unwrap(), //lo pasamos a un String
-    //     None => panic!("Doesnt exist USER env variable."),
-    // };
-    
-    
     
     loop {
         
+        handling_signals();
         // imprimimos el prompt y obtenemos el comando a ejecutar
         let input = prompt();
-
-        cmd_handler(&input);
-        // match cmd_handler(&input) {
-        //     Some(pid) => {}  ,
-        //     None => {},
-        // }
+        
+        cmd_handler(&input)
            
     }
 }

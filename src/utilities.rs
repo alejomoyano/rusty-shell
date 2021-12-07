@@ -2,10 +2,16 @@ use std::io::*;
 use std::env;
 use colored::Colorize;
 
-use crate::commands::*;
+// use crate::commands::*;
 
 pub fn prompt() -> String {
     
+    /* el metodo var devuelve un Option.
+    guardamos en user la env si existe, sino panic!*/
+    // let user= match env::var_os("USER"){
+    //     Some(u) => u.into_string().unwrap(), //lo pasamos a un String
+    //     None => panic!("Doesnt exist USER env variable."),
+    // };
     
     let path= match env::var_os("PWD"){
         Some(p) => p.into_string().unwrap(), //lo pasamos a un String

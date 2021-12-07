@@ -3,15 +3,18 @@ use std::process::{Command, Stdio};
 use super::*;
 use std::os::unix::io::FromRawFd;
 use nix::unistd::pipe;
+use std::io::ErrorKind;
 
 
 // mod utilities;
-use crate::utilities::*;
+// use crate::utilities::*;
+
 
 pub struct Comando <'a>{
     program: &'a str,
     args: Vec<&'a str>,
-    bg: bool
+    bg: bool,
+    pid: u32
 }
 
 impl Comando <'_> {
@@ -29,6 +32,16 @@ impl Comando <'_> {
             }              
         }
     }
+
+    fn default() -> Self {
+        let empty = vec![];
+        Comando {
+            program: "none",
+            args: empty,
+            bg: false,
+            pid: 0
+        }
+    }
 }   
 
         
@@ -38,46 +51,68 @@ static mut CHILD_PID: u32 = 0 ;
 /* Metodo que implementa el comando cd
    para cambiar de directorio de trabajo */
 pub fn change_dir(mut args : Vec<&str>) {
-    let mut curr_dir = env::current_dir().expect("Error al obtener el current dir");
+    let mut curr_dir = env::current_dir()
+        .expect("Error al obtener el current dir");
     
     let path = args.pop().unwrap(); // obtenemos el path
 
-    // caso especial en el que ingresamos ~
-    if "~".eq(path){
-        env::set_current_dir("/home/alejo").expect("Error al cambiar de dir");
+    let result; // despues handleamos esta variable
+    // no se si es la mejor manera de hanlear dos errores que son iguales
+    match path{
+        // caso especial en el que ingresamos ~
+        "~" => {
+            result =  env::set_current_dir("/home/alejo"); 
+        },
+        // demas casos de paths
+        _ => { 
+            result = env::set_current_dir(path);
+        } 
     }
-    else{
-        env::set_current_dir(path).expect("Error al cambiar de dir");
+
+    // no termino de entender como funciona ese if let
+    // puede servir para cuando queremos handlear solo el error
+    if let Err(error) = result {
+        match error.kind() {
+            ErrorKind::NotFound => println!("Directorio no encontrado!"),
+            other_error => {
+                panic!("{:?}",other_error);
+            }
+        }
     }
+    
     // seteamos la env PWD y el OLDPWD
     env::set_var("OLDPWD", curr_dir);
-    
     curr_dir = env::current_dir().expect("Error al obtener el current dir");
     env::set_var("PWD", curr_dir);
 }
 
 /* Metodo para ejecutar un comando */
-pub fn cmd_exec(comando: Comando){
+pub fn cmd_exec(mut comando: Comando){
 
-    let mut child = Command::new(comando.program)
-        .args(comando.args)
-        .spawn()
-        .expect("Problema al ejecutar el comando");
+    if !comando.program.eq("none"){
+        let mut child = Command::new(comando.program)
+            .args(comando.args)
+            .spawn()
+            .expect("Problema al ejecutar el comando");
 
-    // si es en bg entonces no lo esperamos
-    if comando.bg {
-        unsafe { CHILD_PID = 0; }; //ver como hacer esto mejor
-    }
-    else{
-        // para guardar el pid del proceso hijo en primer plano
-        unsafe { CHILD_PID = child.id(); }; //ver como hacer esto mejor
-        // si no es en bg entonces lo esperamos
-        match child.wait() {
-            Ok(_r) => {},
-            Err(_e) => println!("Error al esperar al child"),
+        //guardamos el pid en la struct
+        comando.pid = child.id();
+
+        // si es en bg entonces no lo esperamos
+        if comando.bg {
+            unsafe { CHILD_PID = 0; }; //ver como hacer esto mejor
         }
-    }   
-
+        else{
+            
+            // para guardar el pid del proceso hijo en primer plano
+            unsafe { CHILD_PID = child.id(); }; //ver como hacer esto mejor
+            // si no es en bg entonces lo esperamos
+            match child.wait() {
+                Ok(_r) => {},
+                Err(_error) => println!("Error al esperar al child"),
+            }
+        }   
+    }
 }
 
 pub fn pipe_exec(input: &str){
@@ -143,10 +178,28 @@ pub fn cmd_handler(input: &str){
 pub fn parse_cmd(command: &str) -> Comando {
     
     let mut temp = command.split_whitespace();
-    let program = temp.next().unwrap(); 
+
+    // si no ingresan comando y dan enter da un None,
+    // por ende hay que handlear, sino paniquea.
+    let program = match temp.next() {
+        Some(result) => result,
+        // si no matchea nada entonces devolvemos un commando en default (vacio)
+        None => {
+            let comando = Comando::default();
+            return comando;
+        }
+    };
+    
     let args : Vec<&str> = temp.collect();
 
-    let mut comando = Comando {program: program, args: args, bg: false};
+    let mut comando = Comando {
+        program: program, 
+        args: args, 
+        bg: false, 
+        pid: 0
+    };
+
+    // para checkear si el comando debe ejecutarse en bg
     comando.check();
     comando
 }
