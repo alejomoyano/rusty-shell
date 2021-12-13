@@ -2,10 +2,8 @@ use std::io::*;
 use std::env;
 use colored::Colorize;
 
-// use crate::commands::*;
 
 pub fn prompt() -> String {
-    
     /* el metodo var devuelve un Option.
     guardamos en user la env si existe, sino panic!*/
     // let user= match env::var_os("USER"){

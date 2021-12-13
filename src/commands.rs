@@ -1,20 +1,18 @@
 use std::env;
 use std::process::{Command, Stdio};
 use super::*;
-use std::os::unix::io::FromRawFd;
+use std::os::unix::io::*;
+//{FromRawFd, IntoRawFd};
 use nix::unistd::pipe;
 use std::io::ErrorKind;
+use std::fs::OpenOptions;
 
-
-// mod utilities;
-// use crate::utilities::*;
-
-
+#[derive(Debug)]
 pub struct Comando <'a>{
     program: &'a str,
     args: Vec<&'a str>,
     bg: bool,
-    pid: u32
+    pid: i32
 }
 
 impl Comando <'_> {
@@ -45,8 +43,8 @@ impl Comando <'_> {
 }   
 
         
-
-static mut CHILD_PID: u32 = 0 ;
+// pid del programa que esta actualmente en primer plano
+static mut CHILD_PID: i32 = 0;
 
 /* Metodo que implementa el comando cd
    para cambiar de directorio de trabajo */
@@ -96,21 +94,21 @@ pub fn cmd_exec(mut comando: Comando){
             .expect("Problema al ejecutar el comando");
 
         //guardamos el pid en la struct
-        comando.pid = child.id();
+        comando.pid = child.id() as i32; //casteamos a i32
 
         // si es en bg entonces no lo esperamos
         if comando.bg {
-            unsafe { CHILD_PID = 0; }; //ver como hacer esto mejor
+            print!("\n[{}] running in background",comando.pid);
+            set_pid(0);
+
         }
+        // si no es en bg entonces lo esperamos
         else{
-            
-            // para guardar el pid del proceso hijo en primer plano
-            unsafe { CHILD_PID = child.id(); }; //ver como hacer esto mejor
-            // si no es en bg entonces lo esperamos
             match child.wait() {
                 Ok(_r) => {},
                 Err(_error) => println!("Error al esperar al child"),
             }
+            set_pid(comando.pid);
         }   
     }
 }
@@ -153,23 +151,28 @@ pub fn cmd_handler(input: &str){
     match input.find('|'){
         Some(_resolve) => pipe_exec(&input),
         None => { 
-            /* tomamos el input, lo parseamos y lo metemos en un vector */
-            let comando = parse_cmd(input);
-            
-            match comando.program {
-                // si el comando es cd entramos aca
-                "cd" => { 
-                    change_dir(comando.args);
-                    // return None;
-                },
-                // "close" => { return false; },
-                // en cualquier otro caso entramos aca
-                &_ => { 
-                    cmd_exec(comando);
-                    // unsafe { return Some(CHILD_PID); }
-                },
+            match input.find('>') {
+                Some(_r) => redir_handler(&input),
+                None => {
+                    /* tomamos el input, lo parseamos y lo metemos en un vector */
+                    let comando = parse_cmd(input);
+                    
+                    match comando.program {
+                        // si el comando es cd entramos aca
+                        "cd" => { 
+                            change_dir(comando.args);
+                            // return None;
+                        },
+                        // "close" => { return false; },
+                        // en cualquier otro caso entramos aca
+                        &_ => { 
+                            cmd_exec(comando);
+                            // unsafe { return Some(CHILD_PID); }
+                        }
+                    }
+                }
             }
-        },  
+        }  
     }
 
 
@@ -202,4 +205,51 @@ pub fn parse_cmd(command: &str) -> Comando {
     // para checkear si el comando debe ejecutarse en bg
     comando.check();
     comando
+}
+
+
+/* Metodo que implementa la redireccion de stdout a un file */
+pub fn redir_handler(input: &str) {
+
+    let mut command: Vec<&str> = input.split(">").collect();
+    let file = match command.pop(){
+        Some(f) => f.trim(),
+        None => panic!("Necesario colocar un file para redireccionar")
+    };
+    command = command.remove(0)
+        .split_whitespace()
+        .collect();
+
+    let f = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(file)
+        .unwrap();
+    
+    let file_out = unsafe { Stdio::from_raw_fd(f.as_raw_fd()) };
+
+    let cmd = Comando{
+        program: command.remove(0), 
+        args: command,
+        bg: false,
+        pid: 0
+    };
+
+    let mut child = Command::new(cmd.program)
+        .args(cmd.args)
+        .stdout(file_out)
+        .spawn()
+        .unwrap();
+
+    child.wait().expect("process did not even start");
+}
+
+pub fn get_pid() -> i32 {
+    unsafe { CHILD_PID }
+}
+
+pub fn set_pid(pid: i32) {
+    unsafe { CHILD_PID = pid;}
 }

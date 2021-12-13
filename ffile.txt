@@ -1,0 +1,9 @@
+Cargo.lock
+Cargo.toml
+ffile.txt
+file.txt
+README.md
+src
+target
+text.tx
+text.txt
