@@ -1,2 +1,2 @@
 # rusty-shell
-Just a simple shell in rush
+Just a simple shell in Rust
